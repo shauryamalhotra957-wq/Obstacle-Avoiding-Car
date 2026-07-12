@@ -4,6 +4,15 @@ Arduino code for a small obstacle-avoiding robot car. The robot uses an HC-SR04 
 
 ![Obstacle avoiding car logic](docs/readme-preview.svg)
 
+## Project Snapshot
+
+| Area | Detail |
+| --- | --- |
+| Experience | Arduino autonomous robot car sketch |
+| Core system | Ultrasonic sensing, median filtering, servo scan, motor control, turn verification |
+| Design signal | Pin map, safety thresholds, and readable decision loop |
+| Quality signal | Hardware setup notes, calibration guidance, future improvement roadmap |
+
 ## What It Does
 
 - Measures distance with an HC-SR04 ultrasonic sensor.

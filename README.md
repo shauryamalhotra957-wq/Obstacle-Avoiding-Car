@@ -106,3 +106,7 @@ Obstacle-Avoiding-Car/
 
 Use a separate motor power supply and common ground with the Arduino. Keep wheels lifted during first upload/testing so unexpected motor movement does not damage the robot or nearby objects.
 
+## Operator Experience
+
+The serial console exposes `READY`, `SENSOR`, `ACTION`, `VERIFY`, and `SAFETY` states instead of ambiguous raw messages. The [operator experience guide](docs/USER_EXPERIENCE.md) defines the setup journey, recovery model, and presentation rules for future hardware revisions.
+

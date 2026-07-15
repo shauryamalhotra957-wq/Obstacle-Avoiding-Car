@@ -34,7 +34,7 @@ long getSingleDistance() {
   return duration * 0.034 / 2;
 }
 
-// Takes multiple readings and returns the median — eliminates bad spikes
+// Takes multiple readings and returns the median; eliminates bad spikes
 long getDistance() {
   long readings[NUM_READINGS];
   for (int i = 0; i < NUM_READINGS; i++) {
@@ -100,7 +100,7 @@ void turnUntilClear(bool goLeft, int maxAttempts = 5) {
     scanner.write(90);
     delay(300);
     long check = getDistance();
-    Serial.print("Post-turn check: "); Serial.println(check);
+    Serial.print("[VERIFY] Forward clearance (cm): "); Serial.println(check);
 
     if (check > SAFE_DISTANCE) return; // Path is clear, done!
     // Still blocked — turn a bit more
@@ -119,6 +119,9 @@ void setup() {
   scanner.write(90);
   Serial.begin(9600);
   delay(1500); // Let servo settle
+  Serial.println("[READY] Obstacle car initialized; scanner centered");
+  Serial.println("[STATE] Motors stopped until the first verified reading");
+  stopMotors();
 }
 
 // ---------------- MAIN LOOP ----------------
@@ -127,10 +130,11 @@ void loop() {
   delay(250);
   long frontDistance = getDistance();
 
-  Serial.print("Front: "); Serial.println(frontDistance);
+  Serial.print("[SENSOR] Front clearance (cm): "); Serial.println(frontDistance);
 
   // Emergency: too close, stop immediately
   if (frontDistance < CRITICAL_DISTANCE) {
+    Serial.println("[SAFETY] Critical clearance; stopping and reversing");
     stopMotors();
     delay(100);
     moveBackward();
@@ -141,6 +145,7 @@ void loop() {
 
   // Path is clear
   if (frontDistance > SAFE_DISTANCE) {
+    Serial.println("[ACTION] Path clear; moving forward");
     moveForward();
     return;
   }
@@ -169,21 +174,21 @@ void loop() {
   scanner.write(90);
   delay(300);
 
-  Serial.print("Left: ");  Serial.println(leftDistance);
-  Serial.print("Right: "); Serial.println(rightDistance);
+  Serial.print("[SENSOR] Left clearance (cm): ");  Serial.println(leftDistance);
+  Serial.print("[SENSOR] Right clearance (cm): "); Serial.println(rightDistance);
 
   // --- Decide direction with verification ---
   if (leftDistance > rightDistance && leftDistance > SAFE_DISTANCE) {
-    Serial.println("→ TURN LEFT");
+    Serial.println("[ACTION] Turning left");
     turnUntilClear(true);
   }
   else if (rightDistance >= leftDistance && rightDistance > SAFE_DISTANCE) {
-    Serial.println("→ TURN RIGHT");
+    Serial.println("[ACTION] Turning right");
     turnUntilClear(false);
   }
   else {
     // Dead end: back up more and do a wider turn
-    Serial.println("→ DEAD END – reversing + turning");
+    Serial.println("[SAFETY] Dead end; reversing before a wider turn");
     moveBackward();
     delay(700);
     stopMotors();

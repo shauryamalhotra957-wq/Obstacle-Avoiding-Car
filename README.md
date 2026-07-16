@@ -84,7 +84,7 @@ Tune these values for your chassis, motor speed, battery voltage, and sensor pla
 
 Ultrasonic sensors can occasionally return noisy spikes. This project takes multiple readings, sorts them, and uses the median value. That makes the robot less likely to react to a single bad measurement.
 
-If most pings time out, the sketch now fails closed: it stops the motors and waits for a fresh valid measurement. A missing echo must never be interpreted as a clear path.
+If most pings time out, the sketch now fails closed: it stops the motors and waits for a fresh valid measurement. When exactly two pings succeed, the nearer reading is used so a single far echo cannot hide a nearby obstacle. A missing echo must never be interpreted as a clear path.
 
 ## Repository Structure
 

@@ -1,4 +1,5 @@
 #include <Servo.h>
+#include "distance_filter.h"
 
 // ---------------- PINS ----------------
 #define TRIG_PIN 10
@@ -62,7 +63,10 @@ long getDistance() {
         readings[i] = readings[j];
         readings[j] = tmp;
       }
-  return readings[validCount / 2];
+  // With two valid samples, choose the nearer reading rather than the farther
+  // one. This keeps a single suspiciously large echo from declaring the path
+  // clear when the third ping timed out.
+  return readings[conservativeMedianIndex(validCount)];
 }
 
 // ---------------- MOTOR CONTROLS ----------------

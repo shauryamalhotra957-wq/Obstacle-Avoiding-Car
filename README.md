@@ -17,6 +17,7 @@ Arduino code for a small obstacle-avoiding robot car. The robot uses an HC-SR04 
 
 - Measures distance with an HC-SR04 ultrasonic sensor.
 - Uses a median filter to reduce bad readings and echo spikes.
+- Requires at least two successful pings and treats sensor timeouts as a stop condition instead of open space.
 - Stops and reverses if an obstacle is critically close.
 - Scans left and right using a servo-mounted sensor.
 - Chooses the clearer direction.
@@ -82,6 +83,8 @@ Tune these values for your chassis, motor speed, battery voltage, and sensor pla
 ## Why Median Filtering Matters
 
 Ultrasonic sensors can occasionally return noisy spikes. This project takes multiple readings, sorts them, and uses the median value. That makes the robot less likely to react to a single bad measurement.
+
+If most pings time out, the sketch now fails closed: it stops the motors and waits for a fresh valid measurement. When exactly two pings succeed, the nearer reading is used so a single far echo cannot hide a nearby obstacle. A missing echo must never be interpreted as a clear path.
 
 ## Repository Structure
 

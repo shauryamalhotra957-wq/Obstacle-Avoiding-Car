@@ -1,4 +1,5 @@
 #include <Servo.h>
+#include "distance_filter.h"
 
 // ---------------- PINS ----------------
 #define TRIG_PIN 10
@@ -16,6 +17,8 @@
 #define CRITICAL_DISTANCE 15   // Emergency stop threshold
 #define TURN_SPEED 75          // Higher turn speed = more reliable turns
 #define NUM_READINGS 3          // Median filter samples
+#define MIN_VALID_READINGS 2    // Fail closed unless most pings succeed
+#define DISTANCE_UNKNOWN -1L
 
 int leftMotorSpeed = 78;
 int rightMotorSpeed = 70;
@@ -30,26 +33,40 @@ long getSingleDistance() {
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
   long duration = pulseIn(ECHO_PIN, HIGH, 30000);
-  if (duration == 0) return 999;
+  if (duration == 0) return DISTANCE_UNKNOWN;
   return duration * 0.034 / 2;
+}
+
+bool isDistanceValid(long distance) {
+  return distance > 0;
 }
 
 // Takes multiple readings and returns the median; eliminates bad spikes
 long getDistance() {
   long readings[NUM_READINGS];
+  int validCount = 0;
   for (int i = 0; i < NUM_READINGS; i++) {
-    readings[i] = getSingleDistance();
+    long reading = getSingleDistance();
+    if (isDistanceValid(reading)) {
+      readings[validCount] = reading;
+      validCount++;
+    }
     delay(15); // small gap between pings prevents echo overlap
   }
+  if (validCount < MIN_VALID_READINGS) return DISTANCE_UNKNOWN;
+
   // Simple sort for median
-  for (int i = 0; i < NUM_READINGS - 1; i++)
-    for (int j = i + 1; j < NUM_READINGS; j++)
+  for (int i = 0; i < validCount - 1; i++)
+    for (int j = i + 1; j < validCount; j++)
       if (readings[i] > readings[j]) {
         long tmp = readings[i];
         readings[i] = readings[j];
         readings[j] = tmp;
       }
-  return readings[NUM_READINGS / 2];
+  // With two valid samples, choose the nearer reading rather than the farther
+  // one. This keeps a single suspiciously large echo from declaring the path
+  // clear when the third ping timed out.
+  return readings[conservativeMedianIndex(validCount)];
 }
 
 // ---------------- MOTOR CONTROLS ----------------
@@ -102,6 +119,11 @@ void turnUntilClear(bool goLeft, int maxAttempts = 5) {
     long check = getDistance();
     Serial.print("[VERIFY] Forward clearance (cm): "); Serial.println(check);
 
+    if (!isDistanceValid(check)) {
+      Serial.println("[SAFETY] Distance sensor unavailable during turn; stopping");
+      stopMotors();
+      return;
+    }
     if (check > SAFE_DISTANCE) return; // Path is clear, done!
     // Still blocked — turn a bit more
   }
@@ -132,6 +154,13 @@ void loop() {
 
   Serial.print("[SENSOR] Front clearance (cm): "); Serial.println(frontDistance);
 
+  if (!isDistanceValid(frontDistance)) {
+    Serial.println("[SAFETY] Distance sensor unavailable; movement inhibited");
+    stopMotors();
+    delay(500);
+    return;
+  }
+
   // Emergency: too close, stop immediately
   if (frontDistance < CRITICAL_DISTANCE) {
     Serial.println("[SAFETY] Critical clearance; stopping and reversing");
@@ -141,6 +170,7 @@ void loop() {
     delay(600);
     stopMotors();
     delay(200);
+    return; // Re-measure before making another movement decision.
   }
 
   // Path is clear
@@ -177,12 +207,21 @@ void loop() {
   Serial.print("[SENSOR] Left clearance (cm): ");  Serial.println(leftDistance);
   Serial.print("[SENSOR] Right clearance (cm): "); Serial.println(rightDistance);
 
+  bool leftValid = isDistanceValid(leftDistance);
+  bool rightValid = isDistanceValid(rightDistance);
+  if (!leftValid && !rightValid) {
+    Serial.println("[SAFETY] Direction scan failed; movement inhibited");
+    stopMotors();
+    delay(500);
+    return;
+  }
+
   // --- Decide direction with verification ---
-  if (leftDistance > rightDistance && leftDistance > SAFE_DISTANCE) {
+  if (leftValid && (!rightValid || leftDistance > rightDistance) && leftDistance > SAFE_DISTANCE) {
     Serial.println("[ACTION] Turning left");
     turnUntilClear(true);
   }
-  else if (rightDistance >= leftDistance && rightDistance > SAFE_DISTANCE) {
+  else if (rightValid && (!leftValid || rightDistance >= leftDistance) && rightDistance > SAFE_DISTANCE) {
     Serial.println("[ACTION] Turning right");
     turnUntilClear(false);
   }
@@ -195,7 +234,7 @@ void loop() {
     delay(200);
 
     // Pick the slightly better side even if both bad
-    if (leftDistance >= rightDistance) turnUntilClear(true, 8);
+    if (leftValid && (!rightValid || leftDistance >= rightDistance)) turnUntilClear(true, 8);
     else turnUntilClear(false, 8);
   }
 

@@ -5,6 +5,10 @@ build/
 *.bin
 *.eep
 
+# Python test caches
+__pycache__/
+*.py[cod]
+
 # OS generated files
 .DS_Store
 .DS_Store?

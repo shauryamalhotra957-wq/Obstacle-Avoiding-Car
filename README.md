@@ -17,6 +17,7 @@ Arduino code for a small obstacle-avoiding robot car. The robot uses an HC-SR04 
 
 - Measures distance with an HC-SR04 ultrasonic sensor.
 - Uses a median filter to reduce bad readings and echo spikes.
+- Treats ultrasonic timeouts as sensor faults and holds position instead of assuming the path is clear.
 - Stops and reverses if an obstacle is critically close.
 - Scans left and right using a servo-mounted sensor.
 - Chooses the clearer direction.
@@ -83,6 +84,20 @@ Tune these values for your chassis, motor speed, battery voltage, and sensor pla
 
 Ultrasonic sensors can occasionally return noisy spikes. This project takes multiple readings, sorts them, and uses the median value. That makes the robot less likely to react to a single bad measurement.
 
+## Fail-Safe Sensor Behavior
+
+An HC-SR04 timeout does not prove that the path is open. The sketch marks a
+timed-out ping as invalid and requires a two-of-three valid-reading quorum. When
+exactly two valid readings disagree, it selects the smaller (lower median)
+distance, so a missing echo or high outlier cannot make the car assume extra
+clearance. Without a quorum, front and side scans are treated as sensor faults
+and the motors remain stopped. Turn verification also aborts immediately if the
+sensor becomes unavailable, so the car never keeps turning blind.
+
+Watch Serial Monitor for `[SENSOR] ... timed out` messages. If they repeat,
+check the echo/trigger wiring, common ground, sensor power, and whether the
+sensor is mounted at an angle that produces no return.
+
 ## Repository Structure
 
 ```text
@@ -91,6 +106,8 @@ Obstacle-Avoiding-Car/
   README.md
   docs/
     readme-preview.svg
+  tests/
+    test_sensor_filter.py
 ```
 
 ## Future Improvements

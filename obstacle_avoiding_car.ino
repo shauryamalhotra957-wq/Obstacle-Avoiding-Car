@@ -15,7 +15,10 @@
 #define SAFE_DISTANCE 35        // Reduced: react sooner
 #define CRITICAL_DISTANCE 15   // Emergency stop threshold
 #define TURN_SPEED 75          // Higher turn speed = more reliable turns
-#define NUM_READINGS 3          // Median filter samples
+#define NUM_READINGS 3         // Median filter samples
+#define MIN_VALID_READINGS (NUM_READINGS / 2 + 1)
+#define SENSOR_TIMEOUT_US 30000UL
+#define INVALID_DISTANCE -1L
 
 int leftMotorSpeed = 78;
 int rightMotorSpeed = 70;
@@ -29,27 +32,41 @@ long getSingleDistance() {
   digitalWrite(TRIG_PIN, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
-  long duration = pulseIn(ECHO_PIN, HIGH, 30000);
-  if (duration == 0) return 999;
+  unsigned long duration = pulseIn(ECHO_PIN, HIGH, SENSOR_TIMEOUT_US);
+  if (duration == 0) return INVALID_DISTANCE;
   return duration * 0.034 / 2;
 }
 
-// Takes multiple readings and returns the median; eliminates bad spikes
+bool isValidDistance(long distance) {
+  return distance > 0;
+}
+
+// Requires a majority of valid pings. For an even valid set, the lower median
+// wins so one larger reading can never make the car assume extra clearance.
 long getDistance() {
   long readings[NUM_READINGS];
+  int validReadings = 0;
+
   for (int i = 0; i < NUM_READINGS; i++) {
-    readings[i] = getSingleDistance();
+    long reading = getSingleDistance();
+    if (isValidDistance(reading)) {
+      readings[validReadings] = reading;
+      validReadings++;
+    }
     delay(15); // small gap between pings prevents echo overlap
   }
+
+  if (validReadings < MIN_VALID_READINGS) return INVALID_DISTANCE;
+
   // Simple sort for median
-  for (int i = 0; i < NUM_READINGS - 1; i++)
-    for (int j = i + 1; j < NUM_READINGS; j++)
+  for (int i = 0; i < validReadings - 1; i++)
+    for (int j = i + 1; j < validReadings; j++)
       if (readings[i] > readings[j]) {
         long tmp = readings[i];
         readings[i] = readings[j];
         readings[j] = tmp;
       }
-  return readings[NUM_READINGS / 2];
+  return readings[(validReadings - 1) / 2];
 }
 
 // ---------------- MOTOR CONTROLS ----------------
@@ -90,7 +107,7 @@ void stopMotors() {
 
 // ---------------- TURN WITH VERIFICATION ----------------
 // Turns for given ms, then re-checks front is actually clear
-void turnUntilClear(bool goLeft, int maxAttempts = 5) {
+bool turnUntilClear(bool goLeft, int maxAttempts = 5) {
   for (int i = 0; i < maxAttempts; i++) {
     if (goLeft) turnLeft(); else turnRight();
     delay(600);
@@ -102,9 +119,17 @@ void turnUntilClear(bool goLeft, int maxAttempts = 5) {
     long check = getDistance();
     Serial.print("[VERIFY] Forward clearance (cm): "); Serial.println(check);
 
-    if (check > SAFE_DISTANCE) return; // Path is clear, done!
+    if (!isValidDistance(check)) {
+      Serial.println("[SENSOR] Verification timed out; stopping instead of turning blind");
+      stopMotors();
+      return false;
+    }
+    if (check > SAFE_DISTANCE) return true; // Path is clear, done!
     // Still blocked — turn a bit more
   }
+  Serial.println("[SAFETY] Turn limit reached; holding position");
+  stopMotors();
+  return false;
 }
 
 // ---------------- SETUP ----------------
@@ -132,6 +157,13 @@ void loop() {
 
   Serial.print("[SENSOR] Front clearance (cm): "); Serial.println(frontDistance);
 
+  if (!isValidDistance(frontDistance)) {
+    Serial.println("[SENSOR] Front sensor timed out; holding position for a fresh reading");
+    stopMotors();
+    delay(250);
+    return;
+  }
+
   // Emergency: too close, stop immediately
   if (frontDistance < CRITICAL_DISTANCE) {
     Serial.println("[SAFETY] Critical clearance; stopping and reversing");
@@ -141,6 +173,7 @@ void loop() {
     delay(600);
     stopMotors();
     delay(200);
+    return;
   }
 
   // Path is clear
@@ -177,12 +210,21 @@ void loop() {
   Serial.print("[SENSOR] Left clearance (cm): ");  Serial.println(leftDistance);
   Serial.print("[SENSOR] Right clearance (cm): "); Serial.println(rightDistance);
 
+  bool leftValid = isValidDistance(leftDistance);
+  bool rightValid = isValidDistance(rightDistance);
+  if (!leftValid && !rightValid) {
+    Serial.println("[SENSOR] Both side scans timed out; holding position");
+    stopMotors();
+    delay(250);
+    return;
+  }
+
   // --- Decide direction with verification ---
-  if (leftDistance > rightDistance && leftDistance > SAFE_DISTANCE) {
+  if (leftValid && leftDistance > SAFE_DISTANCE && (!rightValid || leftDistance > rightDistance)) {
     Serial.println("[ACTION] Turning left");
     turnUntilClear(true);
   }
-  else if (rightDistance >= leftDistance && rightDistance > SAFE_DISTANCE) {
+  else if (rightValid && rightDistance > SAFE_DISTANCE) {
     Serial.println("[ACTION] Turning right");
     turnUntilClear(false);
   }
@@ -195,8 +237,8 @@ void loop() {
     delay(200);
 
     // Pick the slightly better side even if both bad
-    if (leftDistance >= rightDistance) turnUntilClear(true, 8);
-    else turnUntilClear(false, 8);
+    if (leftValid && (!rightValid || leftDistance >= rightDistance)) turnUntilClear(true, 8);
+    else if (rightValid) turnUntilClear(false, 8);
   }
 
   stopMotors();

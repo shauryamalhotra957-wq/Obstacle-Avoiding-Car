@@ -1,6 +1,5 @@
 #include <Servo.h>
 
-// ---------------- PINS ----------------
 #define TRIG_PIN 10
 #define ECHO_PIN 9
 #define SERVO_PIN 7
@@ -11,7 +10,6 @@
 #define ENA 6
 #define ENB 11
 
-// ---------------- SETTINGS ----------------
 #define SAFE_DISTANCE 35        // Reduced: react sooner
 #define CRITICAL_DISTANCE 15   // Emergency stop threshold
 #define TURN_SPEED 75          // Higher turn speed = more reliable turns
@@ -22,7 +20,6 @@ int rightMotorSpeed = 70;
 
 Servo scanner;
 
-// ---------------- RELIABLE DISTANCE (Median Filter) ----------------
 long getSingleDistance() {
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
@@ -34,14 +31,12 @@ long getSingleDistance() {
   return duration * 0.034 / 2;
 }
 
-// Takes multiple readings and returns the median; eliminates bad spikes
 long getDistance() {
   long readings[NUM_READINGS];
   for (int i = 0; i < NUM_READINGS; i++) {
     readings[i] = getSingleDistance();
-    delay(15); // small gap between pings prevents echo overlap
+    delay(15);
   }
-  // Simple sort for median
   for (int i = 0; i < NUM_READINGS - 1; i++)
     for (int j = i + 1; j < NUM_READINGS; j++)
       if (readings[i] > readings[j]) {
@@ -52,7 +47,6 @@ long getDistance() {
   return readings[NUM_READINGS / 2];
 }
 
-// ---------------- MOTOR CONTROLS ----------------
 void moveForward() {
   analogWrite(ENA, leftMotorSpeed);
   analogWrite(ENB, rightMotorSpeed);
@@ -70,15 +64,15 @@ void moveBackward() {
 void turnLeft() {
   analogWrite(ENA, TURN_SPEED);
   analogWrite(ENB, TURN_SPEED);
-  digitalWrite(IN1, LOW);  digitalWrite(IN2, HIGH); // Left backward
-  digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);  // Right forward
+  digitalWrite(IN1, LOW);  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
 }
 
 void turnRight() {
   analogWrite(ENA, TURN_SPEED);
   analogWrite(ENB, TURN_SPEED);
-  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);  // Left forward
-  digitalWrite(IN3, LOW);  digitalWrite(IN4, HIGH); // Right backward
+  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);  digitalWrite(IN4, HIGH);
 }
 
 void stopMotors() {
@@ -88,8 +82,6 @@ void stopMotors() {
   digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);
 }
 
-// ---------------- TURN WITH VERIFICATION ----------------
-// Turns for given ms, then re-checks front is actually clear
 void turnUntilClear(bool goLeft, int maxAttempts = 5) {
   for (int i = 0; i < maxAttempts; i++) {
     if (goLeft) turnLeft(); else turnRight();
@@ -102,12 +94,10 @@ void turnUntilClear(bool goLeft, int maxAttempts = 5) {
     long check = getDistance();
     Serial.print("[VERIFY] Forward clearance (cm): "); Serial.println(check);
 
-    if (check > SAFE_DISTANCE) return; // Path is clear, done!
-    // Still blocked — turn a bit more
+    if (check > SAFE_DISTANCE) return;
   }
 }
 
-// ---------------- SETUP ----------------
 void setup() {
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
@@ -118,13 +108,12 @@ void setup() {
   scanner.attach(SERVO_PIN);
   scanner.write(90);
   Serial.begin(9600);
-  delay(1500); // Let servo settle
+  delay(1500);
   Serial.println("[READY] Obstacle car initialized; scanner centered");
   Serial.println("[STATE] Motors stopped until the first verified reading");
   stopMotors();
 }
 
-// ---------------- MAIN LOOP ----------------
 void loop() {
   scanner.write(90);
   delay(250);
@@ -132,7 +121,6 @@ void loop() {
 
   Serial.print("[SENSOR] Front clearance (cm): "); Serial.println(frontDistance);
 
-  // Emergency: too close, stop immediately
   if (frontDistance < CRITICAL_DISTANCE) {
     Serial.println("[SAFETY] Critical clearance; stopping and reversing");
     stopMotors();
@@ -143,41 +131,34 @@ void loop() {
     delay(200);
   }
 
-  // Path is clear
   if (frontDistance > SAFE_DISTANCE) {
     Serial.println("[ACTION] Path clear; moving forward");
     moveForward();
     return;
   }
 
-  // --- Obstacle Detected ---
   stopMotors();
   delay(200);
 
-  // Back up
   moveBackward();
   delay(450);
   stopMotors();
   delay(200);
 
-  // Scan LEFT
-  scanner.write(150); // wider angle = better view
+  scanner.write(150);
   delay(500);
   long leftDistance = getDistance();
 
-  // Scan RIGHT
   scanner.write(30);
   delay(500);
   long rightDistance = getDistance();
 
-  // Re-center
   scanner.write(90);
   delay(300);
 
   Serial.print("[SENSOR] Left clearance (cm): ");  Serial.println(leftDistance);
   Serial.print("[SENSOR] Right clearance (cm): "); Serial.println(rightDistance);
 
-  // --- Decide direction with verification ---
   if (leftDistance > rightDistance && leftDistance > SAFE_DISTANCE) {
     Serial.println("[ACTION] Turning left");
     turnUntilClear(true);
@@ -187,14 +168,12 @@ void loop() {
     turnUntilClear(false);
   }
   else {
-    // Dead end: back up more and do a wider turn
     Serial.println("[SAFETY] Dead end; reversing before a wider turn");
     moveBackward();
     delay(700);
     stopMotors();
     delay(200);
 
-    // Pick the slightly better side even if both bad
     if (leftDistance >= rightDistance) turnUntilClear(true, 8);
     else turnUntilClear(false, 8);
   }

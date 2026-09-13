@@ -1,5 +1,8 @@
 # Obstacle Avoiding Car
 
+[![CI](https://github.com/shauryamalhotra957-wq/Obstacle-Avoiding-Car/actions/workflows/ci.yml/badge.svg)](https://github.com/shauryamalhotra957-wq/Obstacle-Avoiding-Car/actions) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+
 Arduino code for a small obstacle-avoiding robot car. The robot uses an HC-SR04 ultrasonic sensor mounted on a servo, median-filtered distance readings, emergency braking, directional scanning, turn verification, and fail-safe timeout handling to avoid obstacles more reliably.
 
 ![Obstacle avoiding car logic](docs/readme-preview.svg)

@@ -61,9 +61,25 @@ Read front distance
   -> reverse if blocked
   -> scan left and right
   -> treat timed-out side scans as blocked
-  -> turn toward better path
-  -> verify front is clear before continuing
+  -> turn toward the larger clearance
+  -> verify path before moving forward
 ```
+
+## Software-in-the-Loop (SIL) Testing
+
+The repository includes a digital-twin simulation harness in `sim/` to verify obstacle avoidance logic, sensor filtering, and turn decision matrices automatically without physical hardware:
+
+```bash
+# Run automated SIL tests
+python -m unittest discover -s sim
+```
+
+Covered test vectors:
+- HC-SR04 median filtering and echo timeout rejection
+- Emergency braking below critical distance (`<= 15cm`)
+- Lookahead steering selection (Left vs Right clearance comparisons)
+- Corner-trap detection & reverse recovery maneuvers
+- Ultrasonic sensor timeout fail-safe stop
 
 ## Sensor Fail-Safe
 
